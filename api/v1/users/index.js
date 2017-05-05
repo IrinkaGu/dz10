@@ -1,50 +1,62 @@
 "use strict"
 
 const express   = require("express");
-const Users     = require("../../../model/users");
-const User      = require("../../../model/user");
+const mongodb   = require('mongodb');
+const URL       = 'mongodb://127.0.0.1:27017/netologyHomework10';
 
-let users  = new Users();
+
+let users;
+
+mongodb.MongoClient.connect(URL, (err, db) => {
+    if (err) return console.error('Cannt connect to db, error:', error);
+    users = db.collection('users');
+});
 
 const app = module.exports = express();
 
 app.get('/', function(req, res) {
-    users.findAll((err, users) => {
-        send(res, err, users);
+    const regex = { $regex: new RegExp(req.query.find, 'g') };
+    var filter = (req.query.find) ? {$or: [{name: regex}, {surname: regex}, {phone: regex}]} : {};
+    users.find(filter).toArray((err, result) => {
+        send(res, err, result);
     });
 });
 
 app.post('/', function(req, res) {
-    let usr = new User(req.body.surname, req.body.name, req.body.phone);
-    users.add(usr, (err, user) => {
-        send(res, err, user);
-    });
+    if (req.body && req.body.surname && req.body.name && req.body.phone){
+        users.insert(req.body, (err, result) => {
+            send(res, err, result.ops[0]);
+        });
+    }else {
+        send(res, new Error("require params not present"));
+    }
 });
 
 app.get('/:id', function(req, res) {
-    users.findById(req.params.id, (err, user) => {
-        send(res, err, user);
+    users.findOne({_id: new mongodb.ObjectId(req.params.id)}, (err, result) => {
+        send(res, err, result);
     });
 });
 
 app.put('/:id', function(req, res) {
-    users.findById(req.params.id, (err, user) => {
-        if (err)
-            return send(res, err);
+    if (req.body && req.params.id &&
+            req.body.surname && req.body.name && req.body.phone){
 
-        user.surname = req.body.surname;
-        user.name = req.body.name;
-        user.phone = req.body.phone;
-        users.save(user, (err, user) => {
-            send(res, err, user);
+        const id = new mongodb.ObjectId(req.params.id);
+        delete req.body.id;
+
+        users.update({ _id: id }, req.body, (err, result) => {
+            send(res, err, result);
         });
-    });
+    }else {
+        send(res, new Error("require params not present"));
+    }
 });
 
 app.delete('/:id', function(req, res) {
-    users.remove(req.params.id, (err, user) => {
-        send(res, err, user);
-    })
+    users.findAndRemove({ _id: new mongodb.ObjectID(req.params.id) }, (err, result) => {
+        send(res, err, result);
+    });
 });
 
 app.use(function(err, req, res, next) {
